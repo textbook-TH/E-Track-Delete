@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบติดตามสถานะการประเมิน - จัดการผู้ใช้ในระบบ</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Prompt & Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Supabase JS SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Prompt', 'Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#f0f5ff',
+                            100: '#e0ebff',
+                            500: '#2563eb',
+                            600: '#1d4ed8',
+                            700: '#1d4ed8',
+                            dark: '#0f172a',
+                            nav: '#1e293b',
+                            hero: '#0f172a',
+                            accent: '#2563eb'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Prompt', sans-serif;
+            background-color: #f1f5f9;
+        }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        /* Glassmorphism background blur for modal */
+        .backdrop-blur-custom {
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col text-slate-800 antialiased selection:bg-blue-500 selection:text-white">
+
+    <!-- MAIN APP CONTAINER -->
+    <div id="appContainer" class="flex-1 flex flex-col min-h-screen transition-all duration-300">
+        
+        <!-- TOP NAVBAR -->
+        <header class="bg-[#1e293b] text-white sticky top-0 z-20 shadow-md">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+                <!-- Logo & Title -->
+                <div class="flex items-center space-x-3">
+                    <div class="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-lg shadow-sm">
+                        <i class="fa-solid font-bold fa-chart-line"></i>
+                    </div>
+                    <div>
+                        <h1 class="font-bold text-lg tracking-tight leading-none text-white">ระบบติดตามสถานะการประเมิน</h1>
+                        <p class="text-xs text-slate-400 mt-0.5">Evaluation Status Tracking System</p>
+                    </div>
+                </div>
+
+                <!-- Navigation Controls & User Info -->
+                <div class="flex items-center space-x-3">
+                    <!-- Nav links -->
+                    <nav class="hidden md:flex items-center space-x-2 mr-2">
+                        <a href="#" class="px-3 py-1.5 rounded-lg text-sm font-medium text-slate-200 hover:bg-slate-700/60 transition flex items-center space-x-1.5">
+                            <i class="fa-solid fa-house text-xs"></i>
+                            <span>หน้าแรก</span>
+                        </a>
+                    </nav>
+
+                    <!-- Logged in user info or status -->
+                    <div id="userBadge" class="hidden items-center bg-slate-800 border border-slate-700 rounded-full py-1 px-3 space-x-2 text-xs">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                        <span id="userRoleBadgeText" class="text-slate-300 font-medium">เจ้าหน้าที่</span>
+                        <span class="text-slate-500">|</span>
+                        <span id="userEmailBadgeText" class="text-blue-300">textbook@kmitl.ac.th</span>
+                    </div>
+
+                    <!-- Auth button in header -->
+                    <button id="authHeaderBtn" onclick="openLoginModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition shadow-sm flex items-center space-x-2">
+                        <i class="fa-solid fa-user-check text-xs"></i>
+                        <span id="authHeaderBtnText">เข้าสู่ระบบ</span>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- MAIN CONTENT CONTAINER -->
+        <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+            <!-- HERO / ADMIN PANEL BANNER -->
+            <section class="bg-[#0f172a] rounded-2xl p-6 md:p-8 text-white shadow-xl relative overflow-hidden border border-slate-800">
+                <!-- Decorative background elements -->
+                <div class="absolute -right-10 -bottom-10 w-64 h-64 bg-blue-600/10 rounded-full blur-3xl pointer-events-none"></div>
+                <div class="absolute right-1/3 -top-10 w-48 h-48 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none"></div>
+
+                <div class="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+                    <div class="space-y-3 max-w-2xl">
+                        <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-md bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-bold tracking-wider uppercase">
+                            <i class="fa-solid fa-shield-halved text-xs"></i>
+                            <span>ADMIN PANEL</span>
+                        </div>
+                        <h2 class="text-2xl sm:text-3xl font-bold text-white tracking-tight">
+                            จัดการข้อมูลผู้ใช้งาน (สำหรับเจ้าหน้าที่)
+                        </h2>
+                        <p class="text-slate-300 text-sm leading-relaxed">
+                            ลบ ข้อมูล จัดการ User ในระบบติดตามสถานะการประเมิน
+                        </p>
+                    </div>
+
+                    <!-- Action Button: Batch Delete Users -->
+                    <div class="flex flex-wrap items-center gap-3">
+                        <button id="deleteSelectedBtn" onclick="requestDeleteSelected()" disabled class="bg-rose-600/50 cursor-not-allowed text-white font-medium text-sm px-4 py-2.5 rounded-xl shadow-md transition flex items-center space-x-2 border border-rose-500/30 active:scale-95">
+                            <i class="fa-solid fa-trash-can text-sm"></i>
+                            <span id="deleteSelectedText">ลบรายการที่เลือก (0)</span>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- DATA TABLE CONTAINER -->
+            <section class="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
+                <!-- Table Header Bar -->
+                <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                    <div class="flex items-center space-x-3">
+                        <h3 class="font-bold text-slate-800 text-base">รายการผู้ใช้ในระบบทั้งหมด</h3>
+                        <span id="recordCountBadge" class="bg-blue-100 text-blue-700 text-xs font-semibold px-2.5 py-0.5 rounded-full">0 รายการ</span>
+                    </div>
+                    <div class="text-xs text-slate-500 flex items-center space-x-1">
+                        <i class="fa-solid fa-user-shield text-blue-500"></i>
+                        <span>ยกเว้นบัญชีผู้ดูแลระบบ (textbook@kmitl.ac.th)</span>
+                    </div>
+                </div>
+
+                <!-- Table Content -->
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-slate-50 text-slate-500 font-semibold text-xs border-b border-slate-200/70">
+                                <th class="py-3.5 px-4 text-center w-12">
+                                    <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)" class="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer">
+                                </th>
+                                <th class="py-3.5 px-4 text-center w-16">ลำดับ</th>
+                                <th class="py-3.5 px-6">อีเมล (Email)</th>
+                                <th class="py-3.5 px-6">วันที่สมัคร (Created At)</th>
+                                <th class="py-3.5 px-6 text-right">จัดการผู้ใช้</th>
+                            </tr>
+                        </thead>
+                        <tbody id="userTableBody" class="divide-y divide-slate-100 text-sm">
+                            <!-- Dynamic rows injected by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Empty State -->
+                <div id="emptyState" class="hidden p-12 text-center space-y-3">
+                    <div class="w-16 h-16 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mx-auto text-2xl">
+                        <i class="fa-solid fa-users-slash"></i>
+                    </div>
+                    <h4 class="font-medium text-slate-700">ไม่พบข้อมูลผู้ใช้งาน</h4>
+                    <p class="text-slate-400 text-xs max-w-sm mx-auto">ยังไม่มีผู้ใช้งานท่านอื่นลงทะเบียนเข้าใช้งานในระบบ</p>
+                </div>
+            </section>
+        </main>
+
+        <!-- FOOTER -->
+        <footer class="bg-white border-t border-slate-200 py-4 mt-8">
+            <div class="max-w-7xl mx-auto px-4 text-center text-xs text-slate-500">
+                &copy; 2026 ระบบติดตามสถานะการประเมิน (KMITL Tracking System). สงวนลิขสิทธิ์ทั้งหมด.
+            </div>
+        </footer>
+    </div>
+
+    <!-- MODALS & OVERLAYS SECTION -->
+
+    <!-- 1. LOGIN POPUP MODAL -->
+    <div id="loginModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-custom transition-opacity duration-300">
+        <div class="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden border border-slate-100 transform transition-all relative">
+            
+            <div class="p-8 space-y-6">
+                <!-- Header Icon & Title -->
+                <div class="text-center space-y-3">
+                    <div class="w-14 h-14 bg-blue-600 rounded-2xl mx-auto flex items-center justify-center text-white text-2xl shadow-lg shadow-blue-500/30">
+                        <i class="fa-solid fa-user-lock"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-xl font-bold text-slate-800 tracking-tight">เข้าสู่ระบบผู้ดูแลระบบ (Admin)</h3>
+                        <p class="text-xs text-slate-500 mt-1">กรุณากรอกอีเมลและรหัสผ่านเพื่อเข้าสู่ระบบจัดการ</p>
+                    </div>
+                </div>
+
+                <!-- Login Form -->
+                <form id="loginForm" onsubmit="handleLoginSubmit(event)" class="space-y-4">
+                    <div class="space-y-1.5">
+                        <label class="block text-xs font-semibold text-slate-700">อีเมล KMITL</label>
+                        <div class="relative">
+                            <input type="email" id="loginEmail" required value="" placeholder="username@kmitl.ac.th" autocomplete="off"
+                                class="w-full px-3.5 py-2.5 bg-blue-50/50 border border-blue-200/80 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition">
+                        </div>
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <label class="block text-xs font-semibold text-slate-700">รหัสผ่าน</label>
+                        <div class="relative">
+                            <input type="password" id="loginPassword" required value="" placeholder="••••••••" autocomplete="off"
+                                class="w-full pl-3.5 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition">
+                            <button type="button" onclick="togglePasswordVisibility('loginPassword', 'eyeIcon1')" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1">
+                                <i id="eyeIcon1" class="fa-regular fa-eye text-sm"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 rounded-xl shadow-lg shadow-blue-600/30 transition transform active:scale-95 text-sm flex items-center justify-center space-x-2">
+                        <span>เข้าสู่ระบบ</span>
+                        <i class="fa-solid fa-arrow-right-to-bracket text-xs"></i>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. DELETE CONFIRMATION DIALOG -->
+    <div id="deleteConfirmModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-custom">
+        <div class="bg-white w-full max-w-sm rounded-3xl shadow-2xl p-6 text-center space-y-4 border border-slate-100">
+            <div class="w-14 h-14 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto text-2xl">
+                <i class="fa-solid fa-trash-can"></i>
+            </div>
+            <div>
+                <h4 class="text-lg font-bold text-slate-800">ยืนยันการลบผู้ใช้?</h4>
+                <p class="text-xs text-slate-500 mt-1" id="deleteConfirmText">คุณกำลังจะลบรายการผู้ใช้ที่เลือก ข้อมูลผู้ใช้จะถูกลบออกจากระบบถาวร</p>
+            </div>
+            <div class="grid grid-cols-2 gap-3 pt-2">
+                <button onclick="closeDeleteConfirmModal()" class="py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-xl text-xs transition">
+                    ยกเลิก
+                </button>
+                <button id="confirmDeleteBtn" class="py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-medium rounded-xl text-xs shadow-md transition">
+                    ยืนยันลบผู้ใช้
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- TOAST NOTIFICATION CONTAINER -->
+    <div id="toastContainer" class="fixed bottom-5 right-5 z-50 space-y-2 pointer-events-none"></div>
+
+    <script>
+        // Supabase API Credentials Configuration
+        const SUPABASE_URL = 'https://dvzzpuorytdvdawolken.supabase.co';
+        const SUPABASE_KEY = 'sb_publishable_TK-m_pMcUSnq9h2Lf1T3bQ_bUrSpd4H';
+        
+        // Initialize Supabase Client
+        let supabaseClient = null;
+        if (window.supabase && typeof window.supabase.createClient === 'function') {
+            supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        }
+
+        // Admin Email Constant
+        const ADMIN_EMAIL = 'textbook@kmitl.ac.th';
+
+        // Users Data loaded directly from Supabase
+        let allUsersData = [];
+
+        // System state variables
+        let isLoggedIn = false;
+        let selectedUserIds = new Set();
+        let targetDeleteUserIds = [];
+
+        // Initialize Page & Fetch Live Data from Supabase
+        window.addEventListener('DOMContentLoaded', async () => {
+            await fetchUsersFromSupabase();
+            // Show mandatory login popup on startup
+            openLoginModal();
+        });
+
+        // FETCH USERS DIRECTLY FROM SUPABASE DATABASE VIA RPC
+        async function fetchUsersFromSupabase() {
+            try {
+                let fetchedUsers = [];
+
+                if (supabaseClient) {
+                    // Call get_all_users RPC function created in Supabase
+                    const { data, error } = await supabaseClient.rpc('get_all_users');
+                    
+                    if (error) {
+                        console.error("Supabase RPC Error:", error.message);
+                        showToast(`ดึงข้อมูลไม่สำเร็จ: ${error.message}`, 'warning');
+                    } else if (data) {
+                        fetchedUsers = data;
+                    }
+                }
+
+                // Map & Format data from Supabase response
+                if (fetchedUsers && fetchedUsers.length > 0) {
+                    allUsersData = fetchedUsers.map((u, index) => ({
+                        id: String(u.id || (index + 1)),
+                        email: u.email || 'user@kmitl.ac.th',
+                        createdAt: formatThaiDate(u.created_at || new Date().toISOString())
+                    }));
+                } else {
+                    allUsersData = [];
+                }
+
+            } catch (err) {
+                console.error("Supabase Connection Error:", err);
+                showToast('ไม่สามารถดึงข้อมูลจาก Supabase ได้', 'danger');
+            } finally {
+                renderUserTable();
+            }
+        }
+
+        // Helper Function: Format Date String to Thai Regional Display
+        function formatThaiDate(dateStr) {
+            if (!dateStr) return '-';
+            try {
+                const date = new Date(dateStr);
+                if (isNaN(date.getTime())) return dateStr;
+                const thaiMonths = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+                const day = String(date.getDate()).padStart(2, '0');
+                const month = thaiMonths[date.getMonth()];
+                const year = date.getFullYear() + 543;
+                const hours = String(date.getHours()).padStart(2, '0');
+                const mins = String(date.getMinutes()).padStart(2, '0');
+                return `${day} ${month} ${year} - ${hours}:${mins} น.`;
+            } catch (e) {
+                return dateStr;
+            }
+        }
+
+        // FILTER ADMIN ACCOUNT OUT FROM USER TABLE
+        function getFilteredUsers() {
+            return allUsersData.filter(user => user.email.toLowerCase() !== ADMIN_EMAIL.toLowerCase());
+        }
+
+        // RENDER USER TABLE
+        function renderUserTable() {
+            const displayUsers = getFilteredUsers();
+            const tbody = document.getElementById('userTableBody');
+            const emptyState = document.getElementById('emptyState');
+            const recordCountBadge = document.getElementById('recordCountBadge');
+
+            tbody.innerHTML = '';
+            recordCountBadge.textContent = `${displayUsers.length} รายการ`;
+
+            if (displayUsers.length === 0) {
+                emptyState.classList.remove('hidden');
+            } else {
+                emptyState.classList.add('hidden');
+
+                displayUsers.forEach((user, index) => {
+                    const isChecked = selectedUserIds.has(user.id);
+                    const tr = document.createElement('tr');
+                    tr.className = 'hover:bg-slate-50/80 transition text-slate-700 border-b border-slate-100';
+
+                    const initialLetter = user.email ? user.email.charAt(0).toUpperCase() : 'U';
+
+                    tr.innerHTML = `
+                        <td class="py-3.5 px-4 text-center">
+                            <input type="checkbox" value="${user.id}" ${isChecked ? 'checked' : ''} onchange="toggleUserSelect('${user.id}', this.checked)" class="user-checkbox w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer">
+                        </td>
+                        <td class="py-3.5 px-4 text-center text-xs font-semibold text-slate-400">${index + 1}</td>
+                        <td class="py-3.5 px-6 font-medium text-slate-800">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-xs font-bold border border-blue-100 shadow-sm">
+                                    ${initialLetter}
+                                </div>
+                                <span class="text-sm font-medium text-slate-700">${user.email}</span>
+                            </div>
+                        </td>
+                        <td class="py-3.5 px-6 text-xs text-slate-500">${user.createdAt}</td>
+                        <td class="py-3.5 px-6 text-right">
+                            <button onclick="requestSingleDelete('${user.id}', '${user.email}')" class="text-rose-500 hover:text-rose-700 hover:bg-rose-50 p-2 rounded-lg transition duration-150 inline-flex items-center justify-center" title="ลบผู้ใช้นี้">
+                                <i class="fa-solid fa-trash-can text-sm"></i>
+                            </button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+            updateSelectAllCheckboxState();
+            updateDeleteSelectedBtnState();
+        }
+
+        // HANDLE LOGIN SUBMISSION WITH SUPABASE AUTHENTICATION
+        async function handleLoginSubmit(event) {
+            event.preventDefault();
+            const emailInput = document.getElementById('loginEmail').value.trim();
+            const passwordInput = document.getElementById('loginPassword').value;
+
+            // Strict Validation for textbook@kmitl.ac.th
+            if (emailInput.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
+                showToast(`ไม่อนุญาต! บัญชีนี้ไม่มีสิทธิ์เข้าใช้งานระบบจัดการ (ต้องเป็น ${ADMIN_EMAIL})`, 'danger');
+                return;
+            }
+
+            // Supabase Authentication Check
+            if (supabaseClient) {
+                try {
+                    const { data, error } = await supabaseClient.auth.signInWithPassword({
+                        email: emailInput,
+                        password: passwordInput
+                    });
+
+                    if (error) {
+                        showToast(`เข้าสู่ระบบไม่สำเร็จ: ${error.message}`, 'danger');
+                        return;
+                    }
+                } catch (e) {
+                    console.log("Auth attempt completed");
+                }
+            }
+
+            isLoggedIn = true;
+
+            // Update UI User Status in Header
+            document.getElementById('userBadge').classList.remove('hidden');
+            document.getElementById('userBadge').classList.add('flex');
+            document.getElementById('userRoleBadgeText').textContent = 'เจ้าหน้าที่ Admin';
+            document.getElementById('userEmailBadgeText').textContent = ADMIN_EMAIL;
+
+            const authBtn = document.getElementById('authHeaderBtn');
+            const authBtnText = document.getElementById('authHeaderBtnText');
+            authBtn.className = "bg-rose-600 hover:bg-rose-700 text-white px-3.5 py-1.5 rounded-lg text-sm font-medium transition shadow-sm flex items-center space-x-1.5";
+            authBtnText.textContent = "ออกจากระบบ";
+            authBtn.onclick = logout;
+
+            closeLoginModal();
+            showToast(`เข้าสู่ระบบสำเร็จในฐานะผู้ดูแลระบบ (${ADMIN_EMAIL})`, 'success');
+            
+            // Re-fetch users list from Supabase
+            await fetchUsersFromSupabase();
+        }
+
+        // LOGOUT LOGIC WITH SUPABASE SIGN OUT
+        async function logout() {
+            if (supabaseClient) {
+                await supabaseClient.auth.signOut();
+            }
+            isLoggedIn = false;
+            document.getElementById('userBadge').classList.add('hidden');
+            document.getElementById('userBadge').classList.remove('flex');
+
+            const authBtn = document.getElementById('authHeaderBtn');
+            const authBtnText = document.getElementById('authHeaderBtnText');
+            authBtn.className = "bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition shadow-sm flex items-center space-x-2";
+            authBtnText.textContent = "เข้าสู่ระบบ";
+            authBtn.onclick = openLoginModal;
+
+            // Clear login inputs
+            document.getElementById('loginEmail').value = '';
+            document.getElementById('loginPassword').value = '';
+
+            showToast('ออกจากระบบเรียบร้อยแล้ว', 'info');
+            openLoginModal();
+        }
+
+        // MODAL TOGGLES
+        function openLoginModal() {
+            document.getElementById('loginModal').classList.remove('hidden');
+        }
+        function closeLoginModal() {
+            document.getElementById('loginModal').classList.add('hidden');
+        }
+
+        // CHECKBOX CONTROL LOGIC
+        function toggleUserSelect(userId, isChecked) {
+            if (isChecked) {
+                selectedUserIds.add(userId);
+            } else {
+                selectedUserIds.delete(userId);
+            }
+            updateSelectAllCheckboxState();
+            updateDeleteSelectedBtnState();
+        }
+
+        function toggleSelectAll(masterCheckbox) {
+            const displayUsers = getFilteredUsers();
+            if (masterCheckbox.checked) {
+                displayUsers.forEach(u => selectedUserIds.add(u.id));
+            } else {
+                selectedUserIds.clear();
+            }
+            renderUserTable();
+        }
+
+        function updateSelectAllCheckboxState() {
+            const displayUsers = getFilteredUsers();
+            const masterCheckbox = document.getElementById('selectAllCheckbox');
+            if (displayUsers.length > 0 && selectedUserIds.size === displayUsers.length) {
+                masterCheckbox.checked = true;
+                masterCheckbox.indeterminate = false;
+            } else if (selectedUserIds.size > 0) {
+                masterCheckbox.checked = false;
+                masterCheckbox.indeterminate = true;
+            } else {
+                masterCheckbox.checked = false;
+                masterCheckbox.indeterminate = false;
+            }
+        }
+
+        function updateDeleteSelectedBtnState() {
+            const btn = document.getElementById('deleteSelectedBtn');
+            const text = document.getElementById('deleteSelectedText');
+            const count = selectedUserIds.size;
+
+            text.textContent = `ลบรายการที่เลือก (${count})`;
+
+            if (count > 0) {
+                btn.disabled = false;
+                btn.className = "bg-rose-600 hover:bg-rose-700 cursor-pointer text-white font-medium text-sm px-4 py-2.5 rounded-xl shadow-md transition flex items-center space-x-2 border border-rose-500/40 active:scale-95";
+            } else {
+                btn.disabled = true;
+                btn.className = "bg-rose-600/50 cursor-not-allowed text-white font-medium text-sm px-4 py-2.5 rounded-xl shadow-md transition flex items-center space-x-2 border border-rose-500/30";
+            }
+        }
+
+        // DELETE USERS SYSTEM WITH CONFIRM MODAL
+        function requestSingleDelete(userId, email) {
+            if (!isLoggedIn) {
+                showToast('กรุณาเข้าสู่ระบบก่อนทำการลบผู้ใช้', 'warning');
+                openLoginModal();
+                return;
+            }
+
+            targetDeleteUserIds = [userId];
+            document.getElementById('deleteConfirmText').innerHTML = `คุณกำลังจะลบผู้ใช้ <span class="font-bold text-slate-800">${email}</span> ออกจากระบบอย่างถาวร`;
+            
+            const confirmBtn = document.getElementById('confirmDeleteBtn');
+            confirmBtn.onclick = executeDelete;
+
+            document.getElementById('deleteConfirmModal').classList.remove('hidden');
+        }
+
+        function requestDeleteSelected() {
+            if (!isLoggedIn) {
+                showToast('กรุณาเข้าสู่ระบบก่อนทำการลบผู้ใช้', 'warning');
+                openLoginModal();
+                return;
+            }
+
+            if (selectedUserIds.size === 0) return;
+
+            targetDeleteUserIds = Array.from(selectedUserIds);
+            document.getElementById('deleteConfirmText').innerHTML = `คุณกำลังจะลบรายการผู้ใช้ที่เลือกจำนวน <span class="font-bold text-slate-800">${targetDeleteUserIds.length} รายการ</span> ออกจากระบบอย่างถาวร`;
+
+            const confirmBtn = document.getElementById('confirmDeleteBtn');
+            confirmBtn.onclick = executeDelete;
+
+            document.getElementById('deleteConfirmModal').classList.remove('hidden');
+        }
+
+        function closeDeleteConfirmModal() {
+            document.getElementById('deleteConfirmModal').classList.add('hidden');
+            targetDeleteUserIds = [];
+        }
+
+        async function executeDelete() {
+            if (targetDeleteUserIds.length === 0) return;
+
+            let successCount = 0;
+            let failCount = 0;
+
+            // Perform real deletion on Supabase
+            if (supabaseClient) {
+                for (const userId of targetDeleteUserIds) {
+                    try {
+                        // Call RPC delete_user_by_id with target_user_id and admin_email
+                        const { error } = await supabaseClient.rpc('delete_user_by_id', { 
+                            target_user_id: userId, 
+                            admin_email: ADMIN_EMAIL 
+                        });
+
+                        if (error) {
+                            console.error(`Error deleting user ${userId}:`, error.message);
+                            failCount++;
+                        } else {
+                            successCount++;
+                        }
+                    } catch (e) {
+                        console.warn("Exception during user deletion:", e);
+                        failCount++;
+                    }
+                }
+            }
+
+            // Perform deletion in local memory state
+            allUsersData = allUsersData.filter(u => !targetDeleteUserIds.includes(u.id));
+            targetDeleteUserIds.forEach(id => selectedUserIds.delete(id));
+
+            closeDeleteConfirmModal();
+            renderUserTable();
+
+            if (failCount === 0) {
+                showToast('ลบข้อมูลผู้ใช้งานเรียบร้อยแล้ว', 'success');
+            } else {
+                showToast(`ลบสำเร็จ ${successCount} รายการ, ล้มเหลว ${failCount} รายการ`, 'warning');
+            }
+
+            // Refresh live list from Supabase
+            await fetchUsersFromSupabase();
+        }
+
+        // PASSWORD VISIBILITY TOGGLE HELPER
+        function togglePasswordVisibility(inputId, iconId) {
+            const input = document.getElementById(inputId);
+            const icon = document.getElementById(iconId);
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.className = 'fa-regular fa-eye-slash text-sm text-blue-600';
+            } else {
+                input.type = 'password';
+                icon.className = 'fa-regular fa-eye text-sm';
+            }
+        }
+
+        // TOAST NOTIFICATION HELPER
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+
+            let bgColors = 'bg-slate-800 text-white';
+            let icon = 'fa-circle-info';
+
+            if (type === 'success') {
+                bgColors = 'bg-emerald-600 text-white';
+                icon = 'fa-circle-check';
+            } else if (type === 'warning') {
+                bgColors = 'bg-amber-600 text-white';
+                icon = 'fa-triangle-exclamation';
+            } else if (type === 'danger') {
+                bgColors = 'bg-rose-600 text-white';
+                icon = 'fa-circle-xmark';
+            }
+
+            toast.className = `${bgColors} px-4 py-3 rounded-xl shadow-xl flex items-center space-x-2.5 text-xs font-medium transform transition-all duration-300 pointer-events-auto border border-white/10`;
+            toast.innerHTML = `<i class="fa-solid ${icon} text-sm"></i><span>${message}</span>`;
+
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 3500);
+        }
+    </script>
+</body>
+</html>
