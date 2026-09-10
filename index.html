@@ -272,41 +272,31 @@
     <div id="toastContainer" class="fixed bottom-5 right-5 z-50 space-y-2 pointer-events-none"></div>
 
     <script>
-        // Supabase API Credentials Configuration
         const SUPABASE_URL = 'https://dvzzpuorytdvdawolken.supabase.co';
         const SUPABASE_KEY = 'sb_publishable_TK-m_pMcUSnq9h2Lf1T3bQ_bUrSpd4H';
         
-        // Initialize Supabase Client
         let supabaseClient = null;
         if (window.supabase && typeof window.supabase.createClient === 'function') {
             supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         }
 
-        // Admin Email Constant
         const ADMIN_EMAIL = 'textbook@kmitl.ac.th';
 
-        // Users Data loaded directly from Supabase
         let allUsersData = [];
-
-        // System state variables
         let isLoggedIn = false;
         let selectedUserIds = new Set();
         let targetDeleteUserIds = [];
 
-        // Initialize Page & Fetch Live Data from Supabase
         window.addEventListener('DOMContentLoaded', async () => {
             await fetchUsersFromSupabase();
-            // Show mandatory login popup on startup
             openLoginModal();
         });
 
-        // FETCH USERS DIRECTLY FROM SUPABASE DATABASE VIA RPC
         async function fetchUsersFromSupabase() {
             try {
                 let fetchedUsers = [];
 
                 if (supabaseClient) {
-                    // Call get_all_users RPC function created in Supabase
                     const { data, error } = await supabaseClient.rpc('get_all_users');
                     
                     if (error) {
@@ -317,13 +307,15 @@
                     }
                 }
 
-                // Map & Format data from Supabase response
                 if (fetchedUsers && fetchedUsers.length > 0) {
-                    allUsersData = fetchedUsers.map((u, index) => ({
-                        id: String(u.id || (index + 1)),
-                        email: u.email || 'user@kmitl.ac.th',
-                        createdAt: formatThaiDate(u.created_at || new Date().toISOString())
-                    }));
+                    allUsersData = fetchedUsers.map((u) => {
+                        const rawId = u.id || u.user_id || u.uid || u.email || '';
+                        return {
+                            id: String(rawId),
+                            email: u.email || 'user@kmitl.ac.th',
+                            createdAt: formatThaiDate(u.created_at || u.createdat || new Date().toISOString())
+                        };
+                    });
                 } else {
                     allUsersData = [];
                 }
@@ -332,11 +324,12 @@
                 console.error("Supabase Connection Error:", err);
                 showToast('ไม่สามารถดึงข้อมูลจาก Supabase ได้', 'danger');
             } finally {
+                const validIds = new Set(allUsersData.map(u => u.id));
+                selectedUserIds = new Set([...selectedUserIds].filter(id => validIds.has(id)));
                 renderUserTable();
             }
         }
 
-        // Helper Function: Format Date String to Thai Regional Display
         function formatThaiDate(dateStr) {
             if (!dateStr) return '-';
             try {
@@ -354,12 +347,10 @@
             }
         }
 
-        // FILTER ADMIN ACCOUNT OUT FROM USER TABLE
         function getFilteredUsers() {
             return allUsersData.filter(user => user.email.toLowerCase() !== ADMIN_EMAIL.toLowerCase());
         }
 
-        // RENDER USER TABLE
         function renderUserTable() {
             const displayUsers = getFilteredUsers();
             const tbody = document.getElementById('userTableBody');
@@ -408,19 +399,16 @@
             updateDeleteSelectedBtnState();
         }
 
-        // HANDLE LOGIN SUBMISSION WITH SUPABASE AUTHENTICATION
         async function handleLoginSubmit(event) {
             event.preventDefault();
             const emailInput = document.getElementById('loginEmail').value.trim();
             const passwordInput = document.getElementById('loginPassword').value;
 
-            // Strict Validation for textbook@kmitl.ac.th
             if (emailInput.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
                 showToast(`ไม่อนุญาต! บัญชีนี้ไม่มีสิทธิ์เข้าใช้งานระบบจัดการ (ต้องเป็น ${ADMIN_EMAIL})`, 'danger');
                 return;
             }
 
-            // Supabase Authentication Check
             if (supabaseClient) {
                 try {
                     const { data, error } = await supabaseClient.auth.signInWithPassword({
@@ -439,7 +427,6 @@
 
             isLoggedIn = true;
 
-            // Update UI User Status in Header
             document.getElementById('userBadge').classList.remove('hidden');
             document.getElementById('userBadge').classList.add('flex');
             document.getElementById('userRoleBadgeText').textContent = 'เจ้าหน้าที่ Admin';
@@ -454,11 +441,9 @@
             closeLoginModal();
             showToast(`เข้าสู่ระบบสำเร็จในฐานะผู้ดูแลระบบ (${ADMIN_EMAIL})`, 'success');
             
-            // Re-fetch users list from Supabase
             await fetchUsersFromSupabase();
         }
 
-        // LOGOUT LOGIC WITH SUPABASE SIGN OUT
         async function logout() {
             if (supabaseClient) {
                 await supabaseClient.auth.signOut();
@@ -473,7 +458,6 @@
             authBtnText.textContent = "เข้าสู่ระบบ";
             authBtn.onclick = openLoginModal;
 
-            // Clear login inputs
             document.getElementById('loginEmail').value = '';
             document.getElementById('loginPassword').value = '';
 
@@ -481,7 +465,6 @@
             openLoginModal();
         }
 
-        // MODAL TOGGLES
         function openLoginModal() {
             document.getElementById('loginModal').classList.remove('hidden');
         }
@@ -489,7 +472,6 @@
             document.getElementById('loginModal').classList.add('hidden');
         }
 
-        // CHECKBOX CONTROL LOGIC
         function toggleUserSelect(userId, isChecked) {
             if (isChecked) {
                 selectedUserIds.add(userId);
@@ -541,7 +523,6 @@
             }
         }
 
-        // DELETE USERS SYSTEM WITH CONFIRM MODAL
         function requestSingleDelete(userId, email) {
             if (!isLoggedIn) {
                 showToast('กรุณาเข้าสู่ระบบก่อนทำการลบผู้ใช้', 'warning');
@@ -587,13 +568,11 @@
             let successCount = 0;
             let failCount = 0;
 
-            // Perform real deletion on Supabase
             if (supabaseClient) {
                 for (const userId of targetDeleteUserIds) {
                     try {
-                        // Call RPC delete_user_by_id with target_user_id and admin_email
                         const { error } = await supabaseClient.rpc('delete_user_by_id', { 
-                            target_user_id: userId, 
+                            target_user_id: String(userId), 
                             admin_email: ADMIN_EMAIL 
                         });
 
@@ -610,7 +589,6 @@
                 }
             }
 
-            // Perform deletion in local memory state
             allUsersData = allUsersData.filter(u => !targetDeleteUserIds.includes(u.id));
             targetDeleteUserIds.forEach(id => selectedUserIds.delete(id));
 
@@ -623,11 +601,9 @@
                 showToast(`ลบสำเร็จ ${successCount} รายการ, ล้มเหลว ${failCount} รายการ`, 'warning');
             }
 
-            // Refresh live list from Supabase
             await fetchUsersFromSupabase();
         }
 
-        // PASSWORD VISIBILITY TOGGLE HELPER
         function togglePasswordVisibility(inputId, iconId) {
             const input = document.getElementById(inputId);
             const icon = document.getElementById(iconId);
@@ -640,7 +616,6 @@
             }
         }
 
-        // TOAST NOTIFICATION HELPER
         function showToast(message, type = 'info') {
             const container = document.getElementById('toastContainer');
             const toast = document.createElement('div');
