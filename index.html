@@ -238,9 +238,9 @@
                         </div>
                     </div>
 
-                    <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 rounded-xl shadow-lg shadow-blue-600/30 transition transform active:scale-95 text-sm flex items-center justify-center space-x-2">
-                        <span>เข้าสู่ระบบ</span>
-                        <i class="fa-solid fa-arrow-right-to-bracket text-xs"></i>
+                    <button id="loginSubmitBtn" type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 rounded-xl shadow-lg shadow-blue-600/30 transition transform active:scale-95 text-sm flex items-center justify-center space-x-2">
+                        <span id="loginSubmitBtnText">เข้าสู่ระบบ</span>
+                        <i id="loginSubmitBtnIcon" class="fa-solid fa-arrow-right-to-bracket text-xs"></i>
                     </button>
                 </form>
             </div>
@@ -289,6 +289,12 @@
         let selectedUserIds = new Set();
         let targetDeleteUserIds = [];
 
+        // Rate Limiting & Lockout Control
+        let loginFailedAttempts = 0;
+        let lockoutUntil = 0;
+        let isAuthenticating = false;
+        let isDeletingProcess = false;
+
         /**
          * Escape strings to prevent Cross-Site Scripting (XSS)
          */
@@ -300,6 +306,14 @@
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;')
                 .replace(/'/g, '&#039;');
+        }
+
+        /**
+         * Basic email validation format check
+         */
+        function isValidEmailFormat(email) {
+            const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            return re.test(email);
         }
 
         window.addEventListener('DOMContentLoaded', async () => {
@@ -484,6 +498,17 @@
 
         async function handleLoginSubmit(event) {
             event.preventDefault();
+
+            // Anti Brute-Force Rate Limiting Check
+            const now = Date.now();
+            if (now < lockoutUntil) {
+                const remainingSecs = Math.ceil((lockoutUntil - now) / 1000);
+                showToast(`กรุณารอ ${remainingSecs} วินาที ก่อนลองใหม่อีกครั้ง`, 'warning');
+                return;
+            }
+
+            if (isAuthenticating) return;
+
             const emailInput = document.getElementById('loginEmail').value.trim();
             const passwordInput = document.getElementById('loginPassword').value;
 
@@ -492,10 +517,19 @@
                 return;
             }
 
+            if (!isValidEmailFormat(emailInput)) {
+                showToast('รูปแบบอีเมลไม่ถูกต้อง', 'warning');
+                return;
+            }
+
             if (!supabaseClient) {
                 showToast('ไม่สามารถเชื่อมต่อระบบฐานข้อมูล Supabase ได้', 'danger');
                 return;
             }
+
+            isAuthenticating = true;
+            const submitBtn = document.getElementById('loginSubmitBtn');
+            submitBtn.disabled = true;
 
             try {
                 // Authenticate strictly with Supabase Auth
@@ -505,7 +539,13 @@
                 });
 
                 if (error || !data || !data.user) {
-                    showToast(`เข้าสู่ระบบไม่สำเร็จ: ${error ? escapeHtml(error.message) : 'ข้อมูลไม่ถูกต้อง'}`, 'danger');
+                    loginFailedAttempts++;
+                    if (loginFailedAttempts >= 5) {
+                        lockoutUntil = Date.now() + 30000; // Lock 30 seconds after 5 failed attempts
+                        showToast('ระงับการลองเข้าสู่ระบบชั่วคราว 30 วินาที เนื่องจากป้อนข้อมูลผิดหลายครั้ง', 'danger');
+                    } else {
+                        showToast(`เข้าสู่ระบบไม่สำเร็จ: ${error ? escapeHtml(error.message) : 'ข้อมูลไม่ถูกต้อง'}`, 'danger');
+                    }
                     return;
                 }
 
@@ -520,6 +560,10 @@
                     showToast('ไม่อนุญาต! บัญชีนี้ไม่มีสิทธิ์ผู้ดูแลระบบ (Admin)', 'danger');
                     return;
                 }
+
+                // Reset security attempt counters on success
+                loginFailedAttempts = 0;
+                lockoutUntil = 0;
 
                 isLoggedIn = true;
                 currentAdminEmail = user.email || emailInput;
@@ -536,6 +580,9 @@
             } catch (e) {
                 console.error("Login Exception:", e);
                 showToast('เกิดข้อผิดพลาดในการเข้าสู่ระบบ', 'danger');
+            } finally {
+                isAuthenticating = false;
+                submitBtn.disabled = false;
             }
         }
 
@@ -686,8 +733,9 @@
                 return;
             }
 
-            if (targetDeleteUserIds.length === 0) return;
+            if (targetDeleteUserIds.length === 0 || isDeletingProcess) return;
 
+            isDeletingProcess = true;
             let successCount = 0;
             let failCount = 0;
 
@@ -715,6 +763,7 @@
             allUsersData = allUsersData.filter(u => !targetDeleteUserIds.includes(u.id));
             targetDeleteUserIds.forEach(id => selectedUserIds.delete(id));
 
+            isDeletingProcess = false;
             closeDeleteConfirmModal();
             renderUserTable();
 
@@ -770,3 +819,4 @@
     </script>
 </body>
 </html>
+```eof
