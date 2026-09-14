@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="frame-ancestors 'none';">
     <title>ระบบติดตามสถานะการประเมิน - จัดการผู้ใช้ในระบบ</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -222,7 +223,7 @@
                     <div class="space-y-1.5">
                         <label class="block text-xs font-semibold text-slate-700">อีเมล KMITL</label>
                         <div class="relative">
-                            <input type="email" id="loginEmail" required value="" placeholder="username@kmitl.ac.th" autocomplete="off"
+                            <input type="email" id="loginEmail" required value="" placeholder="username@kmitl.ac.th" autocomplete="username"
                                 class="w-full px-3.5 py-2.5 bg-blue-50/50 border border-blue-200/80 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition">
                         </div>
                     </div>
@@ -230,7 +231,7 @@
                     <div class="space-y-1.5">
                         <label class="block text-xs font-semibold text-slate-700">รหัสผ่าน</label>
                         <div class="relative">
-                            <input type="password" id="loginPassword" required value="" placeholder="••••••••" autocomplete="off"
+                            <input type="password" id="loginPassword" required value="" placeholder="••••••••" autocomplete="current-password"
                                 class="w-full pl-3.5 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition">
                             <button type="button" onclick="togglePasswordVisibility('loginPassword', 'eyeIcon1')" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1">
                                 <i id="eyeIcon1" class="fa-regular fa-eye text-sm"></i>
@@ -618,7 +619,13 @@
             currentAdminEmail = '';
             currentAdminId = '';
 
+            // Purge sensitive in-memory data on logout
+            allUsersData = [];
+            selectedUserIds.clear();
+            targetDeleteUserIds = [];
+
             updateUIForAdminState(false);
+            renderUserTable();
 
             document.getElementById('loginEmail').value = '';
             document.getElementById('loginPassword').value = '';
@@ -743,8 +750,7 @@
                 for (const userId of targetDeleteUserIds) {
                     try {
                         const { error } = await supabaseClient.rpc('delete_user_by_id', { 
-                            target_user_id: String(userId), 
-                            admin_email: currentAdminEmail 
+                            target_user_id: String(userId)
                         });
 
                         if (error) {
@@ -819,4 +825,3 @@
     </script>
 </body>
 </html>
-```eof
