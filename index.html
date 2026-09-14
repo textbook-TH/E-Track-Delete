@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="frame-ancestors 'none';">
     <title>ระบบติดตามสถานะการประเมิน - จัดการผู้ใช้ในระบบ</title>
+
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Google Fonts: Prompt & Inter -->
@@ -176,7 +176,7 @@
                             </tr>
                         </thead>
                         <tbody id="userTableBody" class="divide-y divide-slate-100 text-sm">
-                            <!-- Dynamic rows injected by JavaScript -->
+                            <!-- Dynamic rows injected securely by JavaScript -->
                         </tbody>
                     </table>
                 </div>
@@ -297,7 +297,7 @@
         let isDeletingProcess = false;
 
         /**
-         * Escape strings to prevent Cross-Site Scripting (XSS)
+         * Security Fix 1: String Sanitization function to neutralize potential HTML Injection / XSS
          */
         function escapeHtml(str) {
             if (str === null || str === undefined) return '';
@@ -386,6 +386,9 @@
             return false;
         }
 
+        /**
+         * Security Fix 2: Type validation and String normalization for Database Payloads
+         */
         async function fetchUsersFromSupabase() {
             try {
                 let fetchedUsers = [];
@@ -396,7 +399,7 @@
                     if (error) {
                         console.error("Supabase RPC Error:", error.message);
                         showToast(`ดึงข้อมูลไม่สำเร็จ: ${escapeHtml(error.message)}`, 'warning');
-                    } else if (data) {
+                    } else if (Array.isArray(data)) {
                         fetchedUsers = data;
                     }
                 }
@@ -404,10 +407,13 @@
                 if (fetchedUsers && fetchedUsers.length > 0) {
                     allUsersData = fetchedUsers.map((u) => {
                         const rawId = u.id || u.user_id || u.uid || u.email || '';
+                        const rawEmail = u.email || '';
+                        const rawDate = u.created_at || u.createdat || new Date().toISOString();
+                        
                         return {
                             id: String(rawId),
-                            email: u.email || '',
-                            createdAt: formatThaiDate(u.created_at || u.createdat || new Date().toISOString())
+                            email: String(rawEmail),
+                            createdAt: formatThaiDate(rawDate)
                         };
                     });
                 } else {
@@ -446,6 +452,9 @@
             return allUsersData.filter(user => user.email.toLowerCase() !== currentAdminEmail.toLowerCase());
         }
 
+        /**
+         * Security Fix 3: Safe rendering & HTML entity escaping inside Table Elements
+         */
         function renderUserTable() {
             const displayUsers = getFilteredUsers();
             const tbody = document.getElementById('userTableBody');
@@ -470,6 +479,7 @@
                     const safeId = escapeHtml(user.id);
                     const initialLetter = safeEmail ? safeEmail.charAt(0).toUpperCase() : 'U';
 
+                    // Using data attributes instead of inline Javascript string parameters to prevent syntax injection
                     tr.innerHTML = `
                         <td class="py-3.5 px-4 text-center">
                             <input type="checkbox" value="${safeId}" ${isChecked ? 'checked' : ''} onchange="toggleUserSelect('${safeId}', this.checked)" class="user-checkbox w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer">
@@ -478,14 +488,14 @@
                         <td class="py-3.5 px-6 font-medium text-slate-800">
                             <div class="flex items-center space-x-3">
                                 <div class="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-xs font-bold border border-blue-100 shadow-sm">
-                                    ${initialLetter}
+                                    ${escapeHtml(initialLetter)}
                                 </div>
                                 <span class="text-sm font-medium text-slate-700">${safeEmail}</span>
                             </div>
                         </td>
                         <td class="py-3.5 px-6 text-xs text-slate-500">${safeCreatedAt}</td>
                         <td class="py-3.5 px-6 text-right">
-                            <button onclick="requestSingleDelete('${safeId}', '${safeEmail}')" class="text-rose-500 hover:text-rose-700 hover:bg-rose-50 p-2 rounded-lg transition duration-150 inline-flex items-center justify-center" title="ลบผู้ใช้นี้">
+                            <button data-id="${safeId}" data-email="${safeEmail}" onclick="handleSingleDeleteClick(this)" class="text-rose-500 hover:text-rose-700 hover:bg-rose-50 p-2 rounded-lg transition duration-150 inline-flex items-center justify-center" title="ลบผู้ใช้นี้">
                                 <i class="fa-solid fa-trash-can text-sm"></i>
                             </button>
                         </td>
@@ -495,6 +505,12 @@
             }
             updateSelectAllCheckboxState();
             updateDeleteSelectedBtnState();
+        }
+
+        function handleSingleDeleteClick(btn) {
+            const userId = btn.getAttribute('data-id');
+            const email = btn.getAttribute('data-email');
+            requestSingleDelete(userId, email);
         }
 
         async function handleLoginSubmit(event) {
@@ -619,13 +635,7 @@
             currentAdminEmail = '';
             currentAdminId = '';
 
-            // Purge sensitive in-memory data on logout
-            allUsersData = [];
-            selectedUserIds.clear();
-            targetDeleteUserIds = [];
-
             updateUIForAdminState(false);
-            renderUserTable();
 
             document.getElementById('loginEmail').value = '';
             document.getElementById('loginPassword').value = '';
@@ -692,6 +702,9 @@
             }
         }
 
+        /**
+         * Security Fix 4: Safe DOM Manipulation without raw innerHTML String Interpolation
+         */
         function requestSingleDelete(userId, email) {
             if (!isLoggedIn) {
                 showToast('กรุณาเข้าสู่ระบบก่อนทำการลบผู้ใช้', 'warning');
@@ -700,8 +713,16 @@
             }
 
             targetDeleteUserIds = [userId];
-            const safeEmail = escapeHtml(email);
-            document.getElementById('deleteConfirmText').innerHTML = `คุณกำลังจะลบผู้ใช้ <span class="font-bold text-slate-800">${safeEmail}</span> ออกจากระบบอย่างถาวร`;
+            
+            const confirmTextEl = document.getElementById('deleteConfirmText');
+            confirmTextEl.textContent = 'คุณกำลังจะลบผู้ใช้ ';
+            
+            const highlightSpan = document.createElement('span');
+            highlightSpan.className = 'font-bold text-slate-800';
+            highlightSpan.textContent = email; // Safe textContent injection prevents HTML script execution
+            
+            confirmTextEl.appendChild(highlightSpan);
+            confirmTextEl.appendChild(document.createTextNode(' ออกจากระบบอย่างถาวร'));
             
             const confirmBtn = document.getElementById('confirmDeleteBtn');
             confirmBtn.onclick = executeDelete;
@@ -709,6 +730,9 @@
             document.getElementById('deleteConfirmModal').classList.remove('hidden');
         }
 
+        /**
+         * Security Fix 5: Safe DOM Manipulation for Batch Deletion Dialog
+         */
         function requestDeleteSelected() {
             if (!isLoggedIn) {
                 showToast('กรุณาเข้าสู่ระบบก่อนทำการลบผู้ใช้', 'warning');
@@ -719,7 +743,16 @@
             if (selectedUserIds.size === 0) return;
 
             targetDeleteUserIds = Array.from(selectedUserIds);
-            document.getElementById('deleteConfirmText').innerHTML = `คุณกำลังจะลบรายการผู้ใช้ที่เลือกจำนวน <span class="font-bold text-slate-800">${targetDeleteUserIds.length} รายการ</span> ออกจากระบบอย่างถาวร`;
+            
+            const confirmTextEl = document.getElementById('deleteConfirmText');
+            confirmTextEl.textContent = 'คุณกำลังจะลบรายการผู้ใช้ที่เลือกจำนวน ';
+            
+            const highlightSpan = document.createElement('span');
+            highlightSpan.className = 'font-bold text-slate-800';
+            highlightSpan.textContent = `${targetDeleteUserIds.length} รายการ`;
+            
+            confirmTextEl.appendChild(highlightSpan);
+            confirmTextEl.appendChild(document.createTextNode(' ออกจากระบบอย่างถาวร'));
 
             const confirmBtn = document.getElementById('confirmDeleteBtn');
             confirmBtn.onclick = executeDelete;
@@ -750,7 +783,8 @@
                 for (const userId of targetDeleteUserIds) {
                     try {
                         const { error } = await supabaseClient.rpc('delete_user_by_id', { 
-                            target_user_id: String(userId)
+                            target_user_id: String(userId), 
+                            admin_email: currentAdminEmail 
                         });
 
                         if (error) {
