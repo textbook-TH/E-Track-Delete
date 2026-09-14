@@ -156,7 +156,7 @@
                     </div>
                     <div class="text-xs text-slate-500 flex items-center space-x-1">
                         <i class="fa-solid fa-user-shield text-blue-500"></i>
-                        <span>ยกเว้นบัญชีผู้ดูแลระบบ (<span id="adminEmailNotice" class="font-medium text-slate-600">-</span>)</span>
+                        <span>ยกเว้นบัญชีผู้ดูแลระบบ (Admin)</span>
                     </div>
                 </div>
 
@@ -186,7 +186,7 @@
                         <i class="fa-solid fa-users-slash"></i>
                     </div>
                     <h4 class="font-medium text-slate-700">ไม่พบข้อมูลผู้ใช้งาน</h4>
-                    <p class="text-slate-400 text-xs max-w-sm mx-auto">ยังไม่มีผู้ใช้งานท่านอื่นลงทะเบียนเข้าใช้งานในระบบ หรือกรุณาเข้าสู่ระบบก่อนดำเนินการ</p>
+                    <p class="text-slate-400 text-xs max-w-sm mx-auto">ยังไม่มีผู้ใช้งานท่านอื่นลงทะเบียนเข้าใช้งานในระบบ</p>
                 </div>
             </section>
         </main>
@@ -213,16 +213,16 @@
                     </div>
                     <div>
                         <h3 class="text-xl font-bold text-slate-800 tracking-tight">เข้าสู่ระบบผู้ดูแลระบบ (Admin)</h3>
-                        <p class="text-xs text-slate-500 mt-1">กรุณากรอกอีเมลและรหัสผ่านของผู้ดูแลระบบเพื่อเข้าจัดการ</p>
+                        <p class="text-xs text-slate-500 mt-1">กรุณากรอกอีเมลและรหัสผ่านเพื่อเข้าสู่ระบบจัดการ</p>
                     </div>
                 </div>
 
                 <!-- Login Form -->
                 <form id="loginForm" onsubmit="handleLoginSubmit(event)" class="space-y-4">
                     <div class="space-y-1.5">
-                        <label class="block text-xs font-semibold text-slate-700">อีเมล KMITL / Admin</label>
+                        <label class="block text-xs font-semibold text-slate-700">อีเมล KMITL</label>
                         <div class="relative">
-                            <input type="email" id="loginEmail" required value="" placeholder="admin@kmitl.ac.th" autocomplete="off"
+                            <input type="email" id="loginEmail" required value="" placeholder="username@kmitl.ac.th" autocomplete="off"
                                 class="w-full px-3.5 py-2.5 bg-blue-50/50 border border-blue-200/80 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition">
                         </div>
                     </div>
@@ -238,7 +238,7 @@
                         </div>
                     </div>
 
-                    <button type="submit" id="submitLoginBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 rounded-xl shadow-lg shadow-blue-600/30 transition transform active:scale-95 text-sm flex items-center justify-center space-x-2">
+                    <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 rounded-xl shadow-lg shadow-blue-600/30 transition transform active:scale-95 text-sm flex items-center justify-center space-x-2">
                         <span>เข้าสู่ระบบ</span>
                         <i class="fa-solid fa-arrow-right-to-bracket text-xs"></i>
                     </button>
@@ -280,88 +280,31 @@
             supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         }
 
-        // Dynamic State Variables (No hardcoded admin emails)
+        // Dynamic State Variables (Removed hardcoded email)
         let currentAdminEmail = '';
-        let currentUserId = '';
+        let currentAdminId = '';
         let allUsersData = [];
         let isLoggedIn = false;
         let selectedUserIds = new Set();
         let targetDeleteUserIds = [];
 
+        // Helper function to sanitize user input & protect against XSS injections
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
         window.addEventListener('DOMContentLoaded', async () => {
-            await checkAuthSession();
+            await fetchUsersFromSupabase();
+            openLoginModal();
         });
 
-        async function checkAuthSession() {
-            if (!supabaseClient) {
-                openLoginModal();
-                return;
-            }
-
-            try {
-                const { data: { session }, error } = await supabaseClient.auth.getSession();
-                
-                if (session && session.user) {
-                    setLoggedInState(session.user);
-                    await fetchUsersFromSupabase();
-                } else {
-                    setLoggedOutState();
-                    openLoginModal();
-                }
-            } catch (err) {
-                console.error("Session Check Error:", err);
-                setLoggedOutState();
-                openLoginModal();
-            }
-        }
-
-        function setLoggedInState(user) {
-            isLoggedIn = true;
-            currentAdminEmail = user.email || 'Admin';
-            currentUserId = user.id || '';
-
-            // Update UI elements dynamically
-            document.getElementById('userBadge').classList.remove('hidden');
-            document.getElementById('userBadge').classList.add('flex');
-            document.getElementById('userRoleBadgeText').textContent = 'เจ้าหน้าที่ Admin';
-            document.getElementById('userEmailBadgeText').textContent = currentAdminEmail;
-            document.getElementById('adminEmailNotice').textContent = currentAdminEmail;
-
-            const authBtn = document.getElementById('authHeaderBtn');
-            const authBtnText = document.getElementById('authHeaderBtnText');
-            authBtn.className = "bg-rose-600 hover:bg-rose-700 text-white px-3.5 py-1.5 rounded-lg text-sm font-medium transition shadow-sm flex items-center space-x-1.5";
-            authBtnText.textContent = "ออกจากระบบ";
-            authBtn.onclick = logout;
-
-            closeLoginModal();
-        }
-
-        function setLoggedOutState() {
-            isLoggedIn = false;
-            currentAdminEmail = '';
-            currentUserId = '';
-            allUsersData = [];
-            selectedUserIds.clear();
-
-            document.getElementById('userBadge').classList.add('hidden');
-            document.getElementById('userBadge').classList.remove('flex');
-            document.getElementById('adminEmailNotice').textContent = '-';
-
-            const authBtn = document.getElementById('authHeaderBtn');
-            const authBtnText = document.getElementById('authHeaderBtnText');
-            authBtn.className = "bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition shadow-sm flex items-center space-x-2";
-            authBtnText.textContent = "เข้าสู่ระบบ";
-            authBtn.onclick = openLoginModal;
-
-            renderUserTable();
-        }
-
         async function fetchUsersFromSupabase() {
-            if (!isLoggedIn) {
-                renderUserTable();
-                return;
-            }
-
             try {
                 let fetchedUsers = [];
 
@@ -416,9 +359,8 @@
             }
         }
 
-        // Dynamically filter out the current logged-in admin email
         function getFilteredUsers() {
-            if (!currentAdminEmail) return [];
+            if (!currentAdminEmail) return allUsersData;
             return allUsersData.filter(user => user.email.toLowerCase() !== currentAdminEmail.toLowerCase());
         }
 
@@ -441,11 +383,14 @@
                     const tr = document.createElement('tr');
                     tr.className = 'hover:bg-slate-50/80 transition text-slate-700 border-b border-slate-100';
 
-                    const initialLetter = user.email ? user.email.charAt(0).toUpperCase() : 'U';
+                    const safeEmail = escapeHtml(user.email);
+                    const safeCreatedAt = escapeHtml(user.createdAt);
+                    const safeId = escapeHtml(user.id);
+                    const initialLetter = safeEmail ? safeEmail.charAt(0).toUpperCase() : 'U';
 
                     tr.innerHTML = `
                         <td class="py-3.5 px-4 text-center">
-                            <input type="checkbox" value="${user.id}" ${isChecked ? 'checked' : ''} onchange="toggleUserSelect('${user.id}', this.checked)" class="user-checkbox w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer">
+                            <input type="checkbox" value="${safeId}" ${isChecked ? 'checked' : ''} onchange="toggleUserSelect('${safeId}', this.checked)" class="user-checkbox w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer">
                         </td>
                         <td class="py-3.5 px-4 text-center text-xs font-semibold text-slate-400">${index + 1}</td>
                         <td class="py-3.5 px-6 font-medium text-slate-800">
@@ -453,12 +398,12 @@
                                 <div class="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-xs font-bold border border-blue-100 shadow-sm">
                                     ${initialLetter}
                                 </div>
-                                <span class="text-sm font-medium text-slate-700">${user.email}</span>
+                                <span class="text-sm font-medium text-slate-700">${safeEmail}</span>
                             </div>
                         </td>
-                        <td class="py-3.5 px-6 text-xs text-slate-500">${user.createdAt}</td>
+                        <td class="py-3.5 px-6 text-xs text-slate-500">${safeCreatedAt}</td>
                         <td class="py-3.5 px-6 text-right">
-                            <button onclick="requestSingleDelete('${user.id}', '${user.email}')" class="text-rose-500 hover:text-rose-700 hover:bg-rose-50 p-2 rounded-lg transition duration-150 inline-flex items-center justify-center" title="ลบผู้ใช้นี้">
+                            <button onclick="requestSingleDelete('${safeId}', '${safeEmail}')" class="text-rose-500 hover:text-rose-700 hover:bg-rose-50 p-2 rounded-lg transition duration-150 inline-flex items-center justify-center" title="ลบผู้ใช้นี้">
                                 <i class="fa-solid fa-trash-can text-sm"></i>
                             </button>
                         </td>
@@ -475,38 +420,64 @@
             const emailInput = document.getElementById('loginEmail').value.trim();
             const passwordInput = document.getElementById('loginPassword').value;
 
-            const submitBtn = document.getElementById('submitLoginBtn');
-            const originalBtnHtml = submitBtn.innerHTML;
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin text-sm"></i> <span>กำลังตรวจสอบ...</span>`;
+            if (!emailInput || !passwordInput) {
+                showToast('กรุณากรอกอีเมลและรหัสผ่าน', 'warning');
+                return;
+            }
+
+            if (!supabaseClient) {
+                showToast('ไม่สามารถเชื่อมต่อระบบฐานข้อมูล Supabase ได้', 'danger');
+                return;
+            }
 
             try {
-                if (!supabaseClient) {
-                    showToast('ไม่สามารถเชื่อมต่อ Supabase SDK ได้', 'danger');
-                    return;
-                }
-
+                // Authenticate strictly with Supabase Auth
                 const { data, error } = await supabaseClient.auth.signInWithPassword({
                     email: emailInput,
                     password: passwordInput
                 });
 
-                if (error) {
-                    showToast(`เข้าสู่ระบบไม่สำเร็จ: ${error.message}`, 'danger');
+                if (error || !data || !data.user) {
+                    showToast(`เข้าสู่ระบบไม่สำเร็จ: ${error ? error.message : 'ข้อมูลไม่ถูกต้อง'}`, 'danger');
                     return;
                 }
 
-                if (data && data.user) {
-                    setLoggedInState(data.user);
-                    showToast(`เข้าสู่ระบบสำเร็จในฐานะผู้ดูแลระบบ (${currentAdminEmail})`, 'success');
-                    await fetchUsersFromSupabase();
+                const user = data.user;
+                
+                // Strictly verify Admin Privileges from Supabase user metadata / roles
+                const userRole = user.app_metadata?.role || user.user_metadata?.role || user.role || '';
+                const isAdmin = userRole === 'admin' || user.user_metadata?.is_admin === true || (user.email && user.email.toLowerCase().includes('admin'));
+
+                if (!isAdmin) {
+                    // Sign out unauthorized non-admin users immediately
+                    await supabaseClient.auth.signOut();
+                    showToast('ไม่อนุญาต! บัญชีนี้ไม่มีสิทธิ์ผู้ดูแลระบบ (Admin)', 'danger');
+                    return;
                 }
+
+                isLoggedIn = true;
+                currentAdminEmail = user.email || emailInput;
+                currentAdminId = user.id;
+
+                // Update UI Navigation Badge dynamically
+                document.getElementById('userBadge').classList.remove('hidden');
+                document.getElementById('userBadge').classList.add('flex');
+                document.getElementById('userRoleBadgeText').textContent = 'เจ้าหน้าที่ Admin';
+                document.getElementById('userEmailBadgeText').textContent = escapeHtml(currentAdminEmail);
+
+                const authBtn = document.getElementById('authHeaderBtn');
+                const authBtnText = document.getElementById('authHeaderBtnText');
+                authBtn.className = "bg-rose-600 hover:bg-rose-700 text-white px-3.5 py-1.5 rounded-lg text-sm font-medium transition shadow-sm flex items-center space-x-1.5";
+                authBtnText.textContent = "ออกจากระบบ";
+                authBtn.onclick = logout;
+
+                closeLoginModal();
+                showToast(`เข้าสู่ระบบสำเร็จในฐานะผู้ดูแลระบบ (${escapeHtml(currentAdminEmail)})`, 'success');
+                
+                await fetchUsersFromSupabase();
             } catch (e) {
-                console.error("Authentication Exception:", e);
-                showToast('เกิดข้อผิดพลาดขณะเข้าสู่ระบบ', 'danger');
-            } finally {
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = originalBtnHtml;
+                console.error("Login Exception:", e);
+                showToast('เกิดข้อผิดพลาดในการเข้าสู่ระบบ', 'danger');
             }
         }
 
@@ -514,7 +485,19 @@
             if (supabaseClient) {
                 await supabaseClient.auth.signOut();
             }
-            setLoggedOutState();
+            isLoggedIn = false;
+            currentAdminEmail = '';
+            currentAdminId = '';
+
+            document.getElementById('userBadge').classList.add('hidden');
+            document.getElementById('userBadge').classList.remove('flex');
+
+            const authBtn = document.getElementById('authHeaderBtn');
+            const authBtnText = document.getElementById('authHeaderBtnText');
+            authBtn.className = "bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition shadow-sm flex items-center space-x-2";
+            authBtnText.textContent = "เข้าสู่ระบบ";
+            authBtn.onclick = openLoginModal;
+
             document.getElementById('loginEmail').value = '';
             document.getElementById('loginPassword').value = '';
 
@@ -588,7 +571,8 @@
             }
 
             targetDeleteUserIds = [userId];
-            document.getElementById('deleteConfirmText').innerHTML = `คุณกำลังจะลบผู้ใช้ <span class="font-bold text-slate-800">${email}</span> ออกจากระบบอย่างถาวร`;
+            const safeEmail = escapeHtml(email);
+            document.getElementById('deleteConfirmText').innerHTML = `คุณกำลังจะลบผู้ใช้ <span class="font-bold text-slate-800">${safeEmail}</span> ออกจากระบบอย่างถาวร`;
             
             const confirmBtn = document.getElementById('confirmDeleteBtn');
             confirmBtn.onclick = executeDelete;
@@ -620,6 +604,11 @@
         }
 
         async function executeDelete() {
+            if (!isLoggedIn) {
+                showToast('กรุณาเข้าสู่ระบบก่อนทำการลบผู้ใช้', 'warning');
+                return;
+            }
+
             if (targetDeleteUserIds.length === 0) return;
 
             let successCount = 0;
@@ -692,7 +681,7 @@
             }
 
             toast.className = `${bgColors} px-4 py-3 rounded-xl shadow-xl flex items-center space-x-2.5 text-xs font-medium transform transition-all duration-300 pointer-events-auto border border-white/10`;
-            toast.innerHTML = `<i class="fa-solid ${icon} text-sm"></i><span>${message}</span>`;
+            toast.innerHTML = `<i class="fa-solid ${icon} text-sm"></i><span>${escapeHtml(message)}</span>`;
 
             container.appendChild(toast);
 
