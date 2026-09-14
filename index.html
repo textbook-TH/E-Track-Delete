@@ -272,6 +272,7 @@
     <div id="toastContainer" class="fixed bottom-5 right-5 z-50 space-y-2 pointer-events-none"></div>
 
     <script>
+        // Supabase Initialization
         const SUPABASE_URL = 'https://dvzzpuorytdvdawolken.supabase.co';
         const SUPABASE_KEY = 'sb_publishable_TK-m_pMcUSnq9h2Lf1T3bQ_bUrSpd4H';
         
@@ -280,7 +281,7 @@
             supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         }
 
-        // Dynamic State Variables (Removed hardcoded email)
+        // Security & State Variables
         let currentAdminEmail = '';
         let currentAdminId = '';
         let allUsersData = [];
@@ -288,7 +289,9 @@
         let selectedUserIds = new Set();
         let targetDeleteUserIds = [];
 
-        // Helper function to sanitize user input & protect against XSS injections
+        /**
+         * Escape strings to prevent Cross-Site Scripting (XSS)
+         */
         function escapeHtml(str) {
             if (str === null || str === undefined) return '';
             return String(str)
@@ -300,9 +303,73 @@
         }
 
         window.addEventListener('DOMContentLoaded', async () => {
+            // Check existing active session securely
+            await checkExistingAdminSession();
             await fetchUsersFromSupabase();
-            openLoginModal();
+
+            if (!isLoggedIn) {
+                openLoginModal();
+            }
         });
+
+        /**
+         * Safely verify active session from Supabase on load
+         */
+        async function checkExistingAdminSession() {
+            if (!supabaseClient) return;
+
+            try {
+                const { data: { session }, error } = await supabaseClient.auth.getSession();
+                if (error || !session || !session.user) {
+                    return;
+                }
+
+                const user = session.user;
+                const isAdmin = await checkAdminRole(user);
+
+                if (isAdmin) {
+                    isLoggedIn = true;
+                    currentAdminEmail = user.email || '';
+                    currentAdminId = user.id;
+                    updateUIForAdminState(true);
+                } else {
+                    // Sign out unauthorized lingering sessions
+                    await supabaseClient.auth.signOut();
+                }
+            } catch (err) {
+                console.error("Session Verification Error:", err);
+            }
+        }
+
+        /**
+         * Helper to verify whether user possesses explicit admin authorization
+         */
+        async function checkAdminRole(user) {
+            if (!user) return false;
+
+            // 1. Check user metadata / app metadata flags
+            const role = user.app_metadata?.role || user.user_metadata?.role || user.role || '';
+            const isAdminFlag = user.app_metadata?.is_admin === true || user.user_metadata?.is_admin === true;
+
+            if (role === 'admin' || isAdminFlag) {
+                return true;
+            }
+
+            // 2. Check RPC admin authorization function if available
+            if (supabaseClient) {
+                try {
+                    const { data: rpcIsAdmin, error } = await supabaseClient.rpc('is_admin');
+                    if (!error && rpcIsAdmin === true) {
+                        return true;
+                    }
+                } catch (e) {
+                    // Ignore missing RPC silent fallback
+                }
+            }
+
+            // Default fail closed for non-admin accounts
+            return false;
+        }
 
         async function fetchUsersFromSupabase() {
             try {
@@ -313,7 +380,7 @@
                     
                     if (error) {
                         console.error("Supabase RPC Error:", error.message);
-                        showToast(`ดึงข้อมูลไม่สำเร็จ: ${error.message}`, 'warning');
+                        showToast(`ดึงข้อมูลไม่สำเร็จ: ${escapeHtml(error.message)}`, 'warning');
                     } else if (data) {
                         fetchedUsers = data;
                     }
@@ -324,7 +391,7 @@
                         const rawId = u.id || u.user_id || u.uid || u.email || '';
                         return {
                             id: String(rawId),
-                            email: u.email || 'user@kmitl.ac.th',
+                            email: u.email || '',
                             createdAt: formatThaiDate(u.created_at || u.createdat || new Date().toISOString())
                         };
                     });
@@ -346,7 +413,7 @@
             if (!dateStr) return '-';
             try {
                 const date = new Date(dateStr);
-                if (isNaN(date.getTime())) return dateStr;
+                if (isNaN(date.getTime())) return escapeHtml(dateStr);
                 const thaiMonths = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
                 const day = String(date.getDate()).padStart(2, '0');
                 const month = thaiMonths[date.getMonth()];
@@ -355,7 +422,7 @@
                 const mins = String(date.getMinutes()).padStart(2, '0');
                 return `${day} ${month} ${year} - ${hours}:${mins} น.`;
             } catch (e) {
-                return dateStr;
+                return escapeHtml(dateStr);
             }
         }
 
@@ -438,18 +505,17 @@
                 });
 
                 if (error || !data || !data.user) {
-                    showToast(`เข้าสู่ระบบไม่สำเร็จ: ${error ? error.message : 'ข้อมูลไม่ถูกต้อง'}`, 'danger');
+                    showToast(`เข้าสู่ระบบไม่สำเร็จ: ${error ? escapeHtml(error.message) : 'ข้อมูลไม่ถูกต้อง'}`, 'danger');
                     return;
                 }
 
                 const user = data.user;
                 
-                // Strictly verify Admin Privileges from Supabase user metadata / roles
-                const userRole = user.app_metadata?.role || user.user_metadata?.role || user.role || '';
-                const isAdmin = userRole === 'admin' || user.user_metadata?.is_admin === true || (user.email && user.email.toLowerCase().includes('admin'));
+                // Strictly verify Admin privileges
+                const isAdmin = await checkAdminRole(user);
 
                 if (!isAdmin) {
-                    // Sign out unauthorized non-admin users immediately
+                    // Force logout for non-admin unauthorized users
                     await supabaseClient.auth.signOut();
                     showToast('ไม่อนุญาต! บัญชีนี้ไม่มีสิทธิ์ผู้ดูแลระบบ (Admin)', 'danger');
                     return;
@@ -459,18 +525,10 @@
                 currentAdminEmail = user.email || emailInput;
                 currentAdminId = user.id;
 
-                // Update UI Navigation Badge dynamically
-                document.getElementById('userBadge').classList.remove('hidden');
-                document.getElementById('userBadge').classList.add('flex');
-                document.getElementById('userRoleBadgeText').textContent = 'เจ้าหน้าที่ Admin';
-                document.getElementById('userEmailBadgeText').textContent = escapeHtml(currentAdminEmail);
+                // Reset sensitive password input
+                document.getElementById('loginPassword').value = '';
 
-                const authBtn = document.getElementById('authHeaderBtn');
-                const authBtnText = document.getElementById('authHeaderBtnText');
-                authBtn.className = "bg-rose-600 hover:bg-rose-700 text-white px-3.5 py-1.5 rounded-lg text-sm font-medium transition shadow-sm flex items-center space-x-1.5";
-                authBtnText.textContent = "ออกจากระบบ";
-                authBtn.onclick = logout;
-
+                updateUIForAdminState(true);
                 closeLoginModal();
                 showToast(`เข้าสู่ระบบสำเร็จในฐานะผู้ดูแลระบบ (${escapeHtml(currentAdminEmail)})`, 'success');
                 
@@ -478,6 +536,30 @@
             } catch (e) {
                 console.error("Login Exception:", e);
                 showToast('เกิดข้อผิดพลาดในการเข้าสู่ระบบ', 'danger');
+            }
+        }
+
+        function updateUIForAdminState(authenticated) {
+            const userBadge = document.getElementById('userBadge');
+            const authBtn = document.getElementById('authHeaderBtn');
+            const authBtnText = document.getElementById('authHeaderBtnText');
+
+            if (authenticated) {
+                userBadge.classList.remove('hidden');
+                userBadge.classList.add('flex');
+                document.getElementById('userRoleBadgeText').textContent = 'เจ้าหน้าที่ Admin';
+                document.getElementById('userEmailBadgeText').textContent = escapeHtml(currentAdminEmail);
+
+                authBtn.className = "bg-rose-600 hover:bg-rose-700 text-white px-3.5 py-1.5 rounded-lg text-sm font-medium transition shadow-sm flex items-center space-x-1.5";
+                authBtnText.textContent = "ออกจากระบบ";
+                authBtn.onclick = logout;
+            } else {
+                userBadge.classList.add('hidden');
+                userBadge.classList.remove('flex');
+
+                authBtn.className = "bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition shadow-sm flex items-center space-x-2";
+                authBtnText.textContent = "เข้าสู่ระบบ";
+                authBtn.onclick = openLoginModal;
             }
         }
 
@@ -489,14 +571,7 @@
             currentAdminEmail = '';
             currentAdminId = '';
 
-            document.getElementById('userBadge').classList.add('hidden');
-            document.getElementById('userBadge').classList.remove('flex');
-
-            const authBtn = document.getElementById('authHeaderBtn');
-            const authBtnText = document.getElementById('authHeaderBtnText');
-            authBtn.className = "bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition shadow-sm flex items-center space-x-2";
-            authBtnText.textContent = "เข้าสู่ระบบ";
-            authBtn.onclick = openLoginModal;
+            updateUIForAdminState(false);
 
             document.getElementById('loginEmail').value = '';
             document.getElementById('loginPassword').value = '';
@@ -554,7 +629,7 @@
 
             text.textContent = `ลบรายการที่เลือก (${count})`;
 
-            if (count > 0) {
+            if (count > 0 && isLoggedIn) {
                 btn.disabled = false;
                 btn.className = "bg-rose-600 hover:bg-rose-700 cursor-pointer text-white font-medium text-sm px-4 py-2.5 rounded-xl shadow-md transition flex items-center space-x-2 border border-rose-500/40 active:scale-95";
             } else {
@@ -606,6 +681,8 @@
         async function executeDelete() {
             if (!isLoggedIn) {
                 showToast('กรุณาเข้าสู่ระบบก่อนทำการลบผู้ใช้', 'warning');
+                closeDeleteConfirmModal();
+                openLoginModal();
                 return;
             }
 
