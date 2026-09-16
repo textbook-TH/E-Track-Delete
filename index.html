@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>E-Track-Delete รระบบบริหารจัดการและถอนข้อมูลผู้รับการประเมิน - จัดการผู้ใช้ในระบบ</title>
+    <title>ระบบติดตามสถานะการประเมิน - จัดการผู้ใช้ในระบบ</title>
 
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -81,7 +81,7 @@
                 <div class="flex items-center space-x-3">
                     <img src="logo.png" class="h-8 w-auto" alt="Logo">
                     <div>
-                        <h1 class="font-bold text-lg tracking-tight leading-none text-white">E-Track-Delete รระบบบริหารจัดการและถอนข้อมูลผู้รับการประเมิน</h1>
+                        <h1 class="font-bold text-lg tracking-tight leading-none text-white">ระบบติดตามสถานะการประเมิน</h1>
                         <p class="text-xs text-slate-400 mt-0.5">Evaluation Status Tracking System</p>
                     </div>
                 </div>
@@ -130,7 +130,7 @@
                             จัดการข้อมูลผู้ใช้งาน (สำหรับเจ้าหน้าที่)
                         </h2>
                         <p class="text-slate-300 text-sm leading-relaxed">
-                            ลบ ข้อมูล จัดการ User ในE-Track-Delete รระบบบริหารจัดการและถอนข้อมูลผู้รับการประเมิน
+                            ลบ ข้อมูล จัดการ User ในระบบติดตามสถานะการประเมิน
                         </p>
                     </div>
 
@@ -190,9 +190,9 @@
         </main>
 
         <!-- FOOTER -->
-        <footer class="bg-[#0f172a] border-t border-slate-800 py-4 mt-8">
-            <div class="max-w-7xl mx-auto px-4 text-center text-xs text-slate-400">
-                © 2026 งานเทคโนโลยีการศึกษา คณะวิศวกรรมศาสตร์ สถาบันเทคโนโลยีพระจอมเกล้าเจ้าคุณทหารลาดกระบัง
+        <footer class="bg-white border-t border-slate-200 py-4 mt-8">
+            <div class="max-w-7xl mx-auto px-4 text-center text-xs text-slate-500">
+                &copy; 2026 ระบบติดตามสถานะการประเมิน (KMITL Tracking System). สงวนลิขสิทธิ์ทั้งหมด.
             </div>
         </footer>
     </div>
@@ -420,7 +420,7 @@
             } catch (err) {
                 console.error("Supabase Connection Error:", err);
                 showToast('ไม่สามารถดึงข้อมูลจาก Supabase ได้', 'danger');
-            } font-sans {
+            } finally {
                 const validIds = new Set(allUsersData.map(u => u.id));
                 selectedUserIds = new Set([...selectedUserIds].filter(id => validIds.has(id)));
                 renderUserTable();
